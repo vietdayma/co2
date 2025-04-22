@@ -193,7 +193,11 @@ class MainView:
         # Additional analysis sections can be added here 
 
     def _show_benchmark_page(self):
-        st.title("Performance Benchmark 📊")
+        st.title("Performance Benchmark ��")
+        
+        # Debug mode toggle
+        st.sidebar.markdown("### Debug Options")
+        st.session_state['debug_mode'] = st.sidebar.checkbox("Enable Debug Mode", False)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -208,77 +212,126 @@ class MainView:
             fuel_consumption = st.number_input("Fuel Consumption (L/100km)", min_value=0.0, max_value=30.0, value=9.0)
         
         if st.button("Run Benchmark"):
-            self.benchmark_utils.start_benchmark()
-            
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            for i in range(n_requests):
-                if test_mode == "Random Parameters":
-                    engine_size = np.random.uniform(1.0, 8.0)
-                    cylinders = np.random.randint(3, 12)
-                    fuel_consumption = np.random.uniform(4.0, 20.0)
+            try:
+                with st.spinner("Initializing benchmark..."):
+                    self.benchmark_utils.start_benchmark()
                 
-                start_time = time.time()
-                try:
-                    prediction = self.controller.predict(engine_size, cylinders, fuel_consumption)
-                    duration = time.time() - start_time
-                    self.benchmark_utils.record_prediction(duration, prediction)
-                except Exception as e:
-                    self.benchmark_utils.record_prediction(time.time() - start_time, None, 
-                                                         status='error', error=str(e))
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                error_count = 0
+                successful_requests = 0
                 
-                progress = (i + 1) / n_requests
-                progress_bar.progress(progress)
-                status_text.text(f"Processing request {i+1}/{n_requests}")
-            
-            self.benchmark_utils.end_benchmark()
-            stats = self.benchmark_utils.get_statistics()
-            
-            st.success("Benchmark completed!")
-            
-            # Display overall statistics
-            st.subheader("Overall Statistics")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Time", f"{stats['total_time']:.2f}s")
-                st.metric("Success Rate", f"{stats['success_rate']:.1f}%")
-            with col2:
-                st.metric("Requests/Second", f"{stats['requests_per_second']:.1f}")
-                st.metric("Avg Response Time", f"{stats['avg_response_time']*1000:.1f}ms")
-            with col3:
-                st.metric("Min Response Time", f"{stats['min_response_time']*1000:.1f}ms")
-                st.metric("Max Response Time", f"{stats['max_response_time']*1000:.1f}ms")
-            
-            # Display time breakdown
-            st.subheader("Time Breakdown")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Network Time", 
-                         f"{stats['avg_network_time']*1000:.1f}ms",
-                         f"{stats['network_percentage']:.1f}%")
-            with col2:
-                st.metric("Processing Time", 
-                         f"{stats['avg_processing_time']*1000:.1f}ms",
-                         f"{stats['processing_percentage']:.1f}%")
-            with col3:
-                st.metric("Streamlit Overhead", 
-                         f"{stats['avg_streamlit_overhead']*1000:.1f}ms",
-                         f"{stats['streamlit_percentage']:.1f}%")
-            
-            # Display plots
-            st.subheader("Response Time Breakdown Trend")
-            st.pyplot(self.benchmark_utils.plot_response_times())
-            
-            st.subheader("Response Time Distributions")
-            st.pyplot(self.benchmark_utils.plot_response_distribution())
-            
-            # Download results
-            results_df = self.benchmark_utils.get_results_df()
-            st.download_button(
-                "Download Detailed Results CSV",
-                results_df.to_csv().encode('utf-8'),
-                "benchmark_results.csv",
-                "text/csv",
-                key='download-csv'
-            ) 
+                # Create placeholders for real-time stats
+                stats_container = st.empty()
+                
+                for i in range(n_requests):
+                    try:
+                        if test_mode == "Random Parameters":
+                            engine_size = np.random.uniform(1.0, 8.0)
+                            cylinders = np.random.randint(3, 12)
+                            fuel_consumption = np.random.uniform(4.0, 20.0)
+                        
+                        start_time = time.time()
+                        
+                        # Make prediction
+                        prediction = self.controller.predict(engine_size, cylinders, fuel_consumption)
+                        successful_requests += 1
+                        
+                        # Record timing
+                        duration = time.time() - start_time
+                        self.benchmark_utils.record_prediction(duration, prediction)
+                        
+                    except Exception as e:
+                        error_count += 1
+                        duration = time.time() - start_time
+                        self.benchmark_utils.record_prediction(
+                            duration=duration,
+                            prediction=None,
+                            status='error',
+                            error=str(e)
+                        )
+                        if st.session_state.get('debug_mode', False):
+                            st.error(f"Error in request {i+1}: {str(e)}")
+                    
+                    # Update progress
+                    progress = (i + 1) / n_requests
+                    progress_bar.progress(progress)
+                    
+                    # Update status with success rate
+                    success_rate = (successful_requests / (i + 1)) * 100
+                    status_text.text(
+                        f"Processing request {i+1}/{n_requests} "
+                        f"(Success: {successful_requests}, "
+                        f"Errors: {error_count}, "
+                        f"Success Rate: {success_rate:.1f}%)"
+                    )
+                    
+                    # Show real-time stats every 100 requests
+                    if (i + 1) % 100 == 0:
+                        self.benchmark_utils.end_benchmark()
+                        current_stats = self.benchmark_utils.get_statistics()
+                        stats_container.text(
+                            f"Current Stats:\n"
+                            f"Avg Response Time: {current_stats['avg_response_time']*1000:.1f}ms\n"
+                            f"Requests/Second: {current_stats['requests_per_second']:.1f}"
+                        )
+                
+                self.benchmark_utils.end_benchmark()
+                stats = self.benchmark_utils.get_statistics()
+                
+                st.success(f"Benchmark completed! Success Rate: {stats['success_rate']:.1f}%")
+                
+                # Display overall statistics
+                st.subheader("Overall Statistics")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Time", f"{stats['total_time']:.2f}s")
+                    st.metric("Success Rate", f"{stats['success_rate']:.1f}%")
+                with col2:
+                    st.metric("Requests/Second", f"{stats['requests_per_second']:.1f}")
+                    st.metric("Avg Response Time", f"{stats['avg_response_time']*1000:.1f}ms")
+                with col3:
+                    st.metric("Min Response Time", f"{stats['min_response_time']*1000:.1f}ms")
+                    st.metric("Max Response Time", f"{stats['max_response_time']*1000:.1f}ms")
+                
+                # Display time breakdown
+                st.subheader("Time Breakdown")
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Network Time", 
+                             f"{stats['avg_network_time']*1000:.1f}ms",
+                             f"{stats['network_percentage']:.1f}%")
+                with col2:
+                    st.metric("Processing Time", 
+                             f"{stats['avg_processing_time']*1000:.1f}ms",
+                             f"{stats['processing_percentage']:.1f}%")
+                with col3:
+                    st.metric("Streamlit Overhead", 
+                             f"{stats['avg_streamlit_overhead']*1000:.1f}ms",
+                             f"{stats['streamlit_percentage']:.1f}%")
+                with col4:
+                    st.metric("Other Time", 
+                             f"{stats['avg_other_time']*1000:.1f}ms",
+                             f"{stats['other_percentage']:.1f}%")
+                
+                # Display plots
+                st.subheader("Response Time Breakdown Trend")
+                st.pyplot(self.benchmark_utils.plot_response_times())
+                
+                st.subheader("Response Time Distributions")
+                st.pyplot(self.benchmark_utils.plot_response_distribution())
+                
+                # Download results
+                results_df = self.benchmark_utils.get_results_df()
+                st.download_button(
+                    "Download Detailed Results CSV",
+                    results_df.to_csv().encode('utf-8'),
+                    "benchmark_results.csv",
+                    "text/csv",
+                    key='download-csv'
+                )
+                
+            except Exception as e:
+                st.error(f"Benchmark failed: {str(e)}")
+                if st.session_state.get('debug_mode', False):
+                    st.exception(e) 
