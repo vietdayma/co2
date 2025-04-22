@@ -193,140 +193,75 @@ class MainView:
         # Additional analysis sections can be added here 
 
     def _show_benchmark_page(self):
-        st.title("Performance Benchmark 🔍")
+        st.title("Performance Benchmark 📊")
         
-        # Ensure model is initialized
-        try:
-            if not self.controller.trained:
-                test_score = self.controller.initialize_model('co2 Emissions.csv')
-                st.success(f"Model initialized successfully. Test score: {test_score:.3f}")
-        except Exception as e:
-            st.error(f"Failed to initialize model: {str(e)}")
-            return
+        col1, col2 = st.columns(2)
+        with col1:
+            n_requests = st.number_input("Number of Requests", min_value=1, max_value=10000, value=1000)
         
-        # Configuration options
-        st.sidebar.markdown("### Benchmark Options")
-        num_requests = 1000  # Fixed number of requests
+        with col2:
+            test_mode = st.selectbox("Test Mode", ["Fixed Parameters", "Random Parameters"])
         
-        test_mode = st.sidebar.radio("Test Mode", 
-                                    ["Fixed Parameters", "Random Parameters"])
+        if test_mode == "Fixed Parameters":
+            engine_size = st.number_input("Engine Size (L)", min_value=0.0, max_value=10.0, value=2.0)
+            cylinders = st.number_input("Cylinders", min_value=0, max_value=16, value=4)
+            fuel_consumption = st.number_input("Fuel Consumption (L/100km)", min_value=0.0, max_value=30.0, value=9.0)
         
-        debug_mode = st.sidebar.checkbox("Enable Debug Mode", False)
-        
-        if st.button("Start Benchmark", type="primary"):
-            try:
-                progress_text = st.empty()
-                progress_text.write(f"Running benchmark with {num_requests} requests...")
+        if st.button("Run Benchmark"):
+            self.benchmark_utils.start_benchmark()
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for i in range(n_requests):
+                if test_mode == "Random Parameters":
+                    engine_size = np.random.uniform(1.0, 8.0)
+                    cylinders = np.random.randint(3, 12)
+                    fuel_consumption = np.random.uniform(4.0, 20.0)
                 
-                # Initialize benchmark utils
-                self.benchmark_utils = BenchmarkUtils()
-                self.benchmark_utils.start_benchmark()
+                start_time = time.time()
+                try:
+                    prediction = self.controller.predict(engine_size, cylinders, fuel_consumption)
+                    duration = time.time() - start_time
+                    self.benchmark_utils.record_prediction(duration, prediction)
+                except Exception as e:
+                    self.benchmark_utils.record_prediction(time.time() - start_time, None, 
+                                                         status='error', error=str(e))
                 
-                # Process requests
-                progress_bar = st.progress(0)
-                
-                # Prepare fixed features if needed
-                fixed_features = {
-                    'Engine Size(L)': 2.0,
-                    'Cylinders': 4,
-                    'Fuel Consumption Comb (L/100 km)': 8.0,
-                    'Horsepower': 200,
-                    'Weight (kg)': 1500,
-                    'Year': 2023
-                }
-                
-                for i in range(num_requests):
-                    # Prepare features
-                    if test_mode == "Fixed Parameters":
-                        features = fixed_features
-                    else:
-                        features = {
-                            'Engine Size(L)': np.random.uniform(1.0, 6.0),
-                            'Cylinders': np.random.randint(3, 12),
-                            'Fuel Consumption Comb (L/100 km)': np.random.uniform(4.0, 20.0),
-                            'Horsepower': np.random.randint(100, 500),
-                            'Weight (kg)': np.random.randint(1000, 3000),
-                            'Year': np.random.randint(2015, 2024)
-                        }
-                    
-                    try:
-                        start_time = time.time()
-                        prediction = self.controller.predict_emission(features)
-                        end_time = time.time()
-                        
-                        self.benchmark_utils.record_prediction(
-                            duration=end_time - start_time,
-                            prediction=prediction,
-                            status="success"
-                        )
-                        
-                        if debug_mode and i == 0:  # Show first prediction in debug mode
-                            st.write("Sample prediction:", prediction)
-                            st.write("Sample features:", features)
-                            
-                    except Exception as e:
-                        if debug_mode:
-                            st.error(f"Error in request {i+1}: {str(e)}")
-                            st.write("Failed features:", features)
-                        self.benchmark_utils.record_prediction(
-                            duration=0,
-                            prediction=None,
-                            status="error",
-                            error=str(e)
-                        )
-                    
-                    # Update progress
-                    progress = (i + 1) / num_requests
-                    progress_bar.progress(progress)
-                    
-                    if (i + 1) % 100 == 0:
-                        stats = self.benchmark_utils.get_statistics()
-                        progress_text.write(f"Processed {i + 1}/{num_requests} requests. "
-                                         f"Success rate: {stats['success_rate']:.1f}%")
-                
-                # Display final results
-                self.benchmark_utils.end_benchmark()
-                stats = self.benchmark_utils.get_statistics()
-                
-                st.success("Benchmark completed!")
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Total Time", f"{stats['total_time']:.2f}s")
-                with col2:
-                    st.metric("Success Rate", f"{stats['success_rate']:.1f}%")
-                with col3:
-                    st.metric("Requests/Second", f"{stats['requests_per_second']:.1f}")
-                
-                if stats['success_rate'] == 0:
-                    st.error("All requests failed. Please check the debug mode output for details.")
-                
-                # Display timing breakdown
-                if stats['success_rate'] > 0:
-                    st.subheader("Response Time Statistics")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Average", f"{stats['avg_response_time']:.3f}s")
-                    with col2:
-                        st.metric("Median", f"{stats['median_response_time']:.3f}s")
-                    with col3:
-                        st.metric("95th Percentile", f"{stats['p95_response_time']:.3f}s")
-                    
-                    # Plot results
-                    st.subheader("Response Time Distribution")
-                    st.pyplot(self.benchmark_utils.plot_response_distribution())
-                    
-                    st.subheader("Response Time Trend")
-                    st.pyplot(self.benchmark_utils.plot_response_times())
-                
-                # Download results
-                results_df = self.benchmark_utils.get_results_df()
-                st.download_button(
-                    label="Download Results CSV",
-                    data=results_df.to_csv(index=False),
-                    file_name="benchmark_results.csv",
-                    mime="text/csv"
-                )
-                
-            except Exception as e:
-                st.error(f"Benchmark failed: {str(e)}") 
+                progress = (i + 1) / n_requests
+                progress_bar.progress(progress)
+                status_text.text(f"Processing request {i+1}/{n_requests}")
+            
+            self.benchmark_utils.end_benchmark()
+            stats = self.benchmark_utils.get_statistics()
+            
+            st.success("Benchmark completed!")
+            
+            # Display statistics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Time", f"{stats['total_time']:.2f}s")
+                st.metric("Success Rate", f"{stats['success_rate']:.1f}%")
+            with col2:
+                st.metric("Requests/Second", f"{stats['requests_per_second']:.1f}")
+                st.metric("Avg Response Time", f"{stats['avg_response_time']*1000:.1f}ms")
+            with col3:
+                st.metric("Min Response Time", f"{stats['min_response_time']*1000:.1f}ms")
+                st.metric("Max Response Time", f"{stats['max_response_time']*1000:.1f}ms")
+            
+            # Display plots
+            st.subheader("Response Time Trend")
+            st.pyplot(self.benchmark_utils.plot_response_times())
+            
+            st.subheader("Response Time Distribution")
+            st.pyplot(self.benchmark_utils.plot_response_distribution())
+            
+            # Download results
+            results_df = self.benchmark_utils.get_results_df()
+            st.download_button(
+                "Download Results CSV",
+                results_df.to_csv().encode('utf-8'),
+                "benchmark_results.csv",
+                "text/csv",
+                key='download-csv'
+            ) 
