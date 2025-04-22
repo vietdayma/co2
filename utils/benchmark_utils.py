@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 class BenchmarkUtils:
     def __init__(self):
@@ -12,7 +13,7 @@ class BenchmarkUtils:
         
     def start_benchmark(self):
         """Start the benchmark session"""
-        self.start_time = time.perf_counter()
+        self.start_time = time.perf_counter_ns()
         self.results = []
         
     def record_prediction(self, timing_data):
@@ -32,7 +33,7 @@ class BenchmarkUtils:
         
     def end_benchmark(self):
         """End the benchmark session"""
-        self.end_time = time.perf_counter()
+        self.end_time = time.perf_counter_ns()
         
     def get_statistics(self):
         """Calculate benchmark statistics including network metrics"""
@@ -53,7 +54,7 @@ class BenchmarkUtils:
         df = pd.DataFrame(self.results)
         successful_df = df[df['status'] == 'success']
         
-        total_time = self.end_time - self.start_time
+        total_time = (self.end_time - self.start_time) / 1_000_000_000  # Convert to seconds
         total_requests = len(df)
         successful_requests = len(successful_df)
         
@@ -102,13 +103,16 @@ class BenchmarkUtils:
         ax.plot(range(len(successful_df)), successful_df['total_time'], 
                 label='Total Time', color='blue')
         
-        # Plot network time
-        ax.plot(range(len(successful_df)), successful_df['network_time'],
-                label='Network Time', color='red', alpha=0.7)
+        # Plot network time as stacked area
+        ax.fill_between(range(len(successful_df)), 
+                       successful_df['network_time'],
+                       color='red', alpha=0.3, label='Network Time')
         
-        # Plot processing time
-        ax.plot(range(len(successful_df)), successful_df['processing_time'],
-                label='Processing Time', color='green', alpha=0.7)
+        # Plot processing time as stacked area
+        ax.fill_between(range(len(successful_df)),
+                       successful_df['processing_time'],
+                       successful_df['network_time'],
+                       color='green', alpha=0.3, label='Processing Time')
         
         ax.set_xlabel('Request Number')
         ax.set_ylabel('Time (ms)')
@@ -134,22 +138,25 @@ class BenchmarkUtils:
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 4))
         
         # Total time distribution
-        ax1.hist(successful_df['total_time'], bins=30, color='blue', alpha=0.7)
+        sns.histplot(data=successful_df, x='total_time', bins=30, 
+                    color='blue', alpha=0.7, ax=ax1)
         ax1.set_xlabel('Total Time (ms)')
         ax1.set_ylabel('Frequency')
-        ax1.set_title('Total Response Time')
+        ax1.set_title(f'Total Response Time\n(mean: {successful_df["total_time"].mean():.1f}ms)')
         ax1.grid(True, alpha=0.3)
         
         # Network time distribution
-        ax2.hist(successful_df['network_time'], bins=30, color='red', alpha=0.7)
+        sns.histplot(data=successful_df, x='network_time', bins=30,
+                    color='red', alpha=0.7, ax=ax2)
         ax2.set_xlabel('Network Time (ms)')
-        ax2.set_title('Network Time')
+        ax2.set_title(f'Network Time\n(mean: {successful_df["network_time"].mean():.1f}ms)')
         ax2.grid(True, alpha=0.3)
         
         # Processing time distribution
-        ax3.hist(successful_df['processing_time'], bins=30, color='green', alpha=0.7)
+        sns.histplot(data=successful_df, x='processing_time', bins=30,
+                    color='green', alpha=0.7, ax=ax3)
         ax3.set_xlabel('Processing Time (ms)')
-        ax3.set_title('Processing Time')
+        ax3.set_title(f'Processing Time\n(mean: {successful_df["processing_time"].mean():.1f}ms)')
         ax3.grid(True, alpha=0.3)
         
         plt.tight_layout()
