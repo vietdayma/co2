@@ -193,7 +193,7 @@ class MainView:
         # Additional analysis sections can be added here 
 
     def _show_benchmark_page(self):
-        st.title("Performance Benchmark ��")
+        st.title("Performance Benchmark 🔍")
         
         # Debug mode toggle
         st.sidebar.markdown("### Debug Options")
@@ -210,71 +210,61 @@ class MainView:
             engine_size = st.number_input("Engine Size (L)", min_value=0.0, max_value=10.0, value=2.0)
             cylinders = st.number_input("Cylinders", min_value=0, max_value=16, value=4)
             fuel_consumption = st.number_input("Fuel Consumption (L/100km)", min_value=0.0, max_value=30.0, value=9.0)
+            horsepower = st.number_input("Horsepower", min_value=50, max_value=1000, value=200)
+            weight = st.number_input("Weight (kg)", min_value=500, max_value=5000, value=1500)
+            year = st.number_input("Year", min_value=2015, max_value=2024, value=2023)
         
         if st.button("Run Benchmark"):
             try:
-                with st.spinner("Initializing benchmark..."):
+                with st.spinner("Running benchmark..."):
+                    # Start benchmark
                     self.benchmark_utils.start_benchmark()
-                
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                error_count = 0
-                successful_requests = 0
-                
-                # Create placeholders for real-time stats
-                stats_container = st.empty()
-                
-                for i in range(n_requests):
-                    try:
+                    
+                    # Prepare all requests data
+                    requests_data = []
+                    for _ in range(n_requests):
                         if test_mode == "Random Parameters":
-                            engine_size = np.random.uniform(1.0, 8.0)
-                            cylinders = np.random.randint(3, 12)
-                            fuel_consumption = np.random.uniform(4.0, 20.0)
-                        
-                        start_time = time.time()
-                        
-                        # Make prediction
-                        prediction = self.controller.predict(engine_size, cylinders, fuel_consumption)
-                        successful_requests += 1
-                        
-                        # Record timing
-                        duration = time.time() - start_time
-                        self.benchmark_utils.record_prediction(duration, prediction)
-                        
-                    except Exception as e:
-                        error_count += 1
-                        duration = time.time() - start_time
-                        self.benchmark_utils.record_prediction(
-                            duration=duration,
-                            prediction=None,
-                            status='error',
-                            error=str(e)
-                        )
-                        if st.session_state.get('debug_mode', False):
-                            st.error(f"Error in request {i+1}: {str(e)}")
+                            features = {
+                                'Engine Size(L)': np.random.uniform(1.0, 8.0),
+                                'Cylinders': np.random.randint(3, 12),
+                                'Fuel Consumption Comb (L/100 km)': np.random.uniform(4.0, 20.0),
+                                'Horsepower': np.random.uniform(100, 500),
+                                'Weight (kg)': np.random.uniform(1000, 3000),
+                                'Year': np.random.randint(2015, 2024)
+                            }
+                        else:
+                            features = {
+                                'Engine Size(L)': engine_size,
+                                'Cylinders': cylinders,
+                                'Fuel Consumption Comb (L/100 km)': fuel_consumption,
+                                'Horsepower': horsepower,
+                                'Weight (kg)': weight,
+                                'Year': year
+                            }
+                        requests_data.append(features)
                     
-                    # Update progress
-                    progress = (i + 1) / n_requests
-                    progress_bar.progress(progress)
+                    # Process all requests
+                    successful_requests = 0
+                    error_count = 0
                     
-                    # Update status with success rate
-                    success_rate = (successful_requests / (i + 1)) * 100
-                    status_text.text(
-                        f"Processing request {i+1}/{n_requests} "
-                        f"(Success: {successful_requests}, "
-                        f"Errors: {error_count}, "
-                        f"Success Rate: {success_rate:.1f}%)"
-                    )
-                    
-                    # Show real-time stats every 100 requests
-                    if (i + 1) % 100 == 0:
-                        self.benchmark_utils.end_benchmark()
-                        current_stats = self.benchmark_utils.get_statistics()
-                        stats_container.text(
-                            f"Current Stats:\n"
-                            f"Avg Response Time: {current_stats['avg_response_time']*1000:.1f}ms\n"
-                            f"Requests/Second: {current_stats['requests_per_second']:.1f}"
-                        )
+                    for features in requests_data:
+                        try:
+                            start_time = time.time()
+                            prediction = self.controller.predict_emission(features)
+                            duration = time.time() - start_time
+                            self.benchmark_utils.record_prediction(duration, prediction)
+                            successful_requests += 1
+                        except Exception as e:
+                            error_count += 1
+                            duration = time.time() - start_time
+                            self.benchmark_utils.record_prediction(
+                                duration=duration,
+                                prediction=None,
+                                status='error',
+                                error=str(e)
+                            )
+                            if st.session_state.get('debug_mode', False):
+                                st.error(f"Error in request: {str(e)}")
                 
                 self.benchmark_utils.end_benchmark()
                 stats = self.benchmark_utils.get_statistics()
