@@ -216,6 +216,9 @@ class MainView:
             progress_bar = st.progress(0)
             status_text = st.empty()
             
+            # Container for detailed timing logs
+            timing_log = st.empty()
+            
             for i in range(n_requests):
                 if test_mode == "Random Parameters":
                     engine_size = np.random.uniform(1.0, 8.0)
@@ -234,20 +237,27 @@ class MainView:
                     'Year': year
                 }
                 
-                # Measure with network time
-                client_start = time.time()
+                # Start measuring total time (includes network overhead)
+                total_start = time.perf_counter()
+                
                 try:
-                    # Start processing time
-                    process_start = time.time()
+                    # Start measuring processing time
+                    process_start = time.perf_counter()
+                    
+                    # Actual prediction
                     prediction = self.controller.predict_emission(features)
-                    process_end = time.time()
+                    
+                    # End processing time
+                    process_end = time.perf_counter()
                     
                     # End total time
-                    client_end = time.time()
+                    total_end = time.perf_counter()
                     
-                    # Calculate times
-                    total_time = (client_end - client_start) * 1000  # Convert to ms
+                    # Calculate times in milliseconds
+                    total_time = (total_end - total_start) * 1000
                     processing_time = (process_end - process_start) * 1000
+                    
+                    # Network time includes both request and response overhead
                     network_time = total_time - processing_time
                     
                     timing_data = {
@@ -258,9 +268,21 @@ class MainView:
                         'status': 'success'
                     }
                     
+                    # Update timing log every 100 requests
+                    if i % 100 == 0:
+                        timing_log.text(f"""
+                        Request {i+1} timing:
+                        - Total: {total_time:.2f}ms
+                        - Network: {network_time:.2f}ms ({network_time/total_time*100:.1f}%)
+                        - Processing: {processing_time:.2f}ms ({processing_time/total_time*100:.1f}%)
+                        """)
+                    
                 except Exception as e:
+                    total_end = time.perf_counter()
                     timing_data = {
-                        'total_time': (time.time() - client_start) * 1000,
+                        'total_time': (total_end - total_start) * 1000,
+                        'network_time': 0,
+                        'processing_time': 0,
                         'status': 'error',
                         'error': str(e)
                     }
@@ -281,12 +303,15 @@ class MainView:
             with col1:
                 st.metric("Total Time", f"{stats['total_time']:.2f}s")
                 st.metric("Success Rate", f"{stats['success_rate']:.1f}%")
+                st.metric("Requests/Second", f"{stats['requests_per_second']:.1f}")
             with col2:
                 st.metric("Avg Network Time", f"{stats['avg_network_time']:.1f}ms")
+                st.metric("Network %", f"{(stats['avg_network_time']/(stats['avg_network_time'] + stats['avg_processing_time'])*100):.1f}%")
                 st.metric("Avg Processing Time", f"{stats['avg_processing_time']:.1f}ms")
             with col3:
                 st.metric("Min Response Time", f"{stats['min_response_time']:.1f}ms")
                 st.metric("Max Response Time", f"{stats['max_response_time']:.1f}ms")
+                st.metric("Processing %", f"{(stats['avg_processing_time']/(stats['avg_network_time'] + stats['avg_processing_time'])*100):.1f}%")
             
             # Display plots with network breakdown
             st.subheader("Response Time Breakdown")
