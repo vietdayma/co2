@@ -206,6 +206,9 @@ class MainView:
             engine_size = st.number_input("Engine Size (L)", min_value=0.0, max_value=10.0, value=2.0)
             cylinders = st.number_input("Cylinders", min_value=0, max_value=16, value=4)
             fuel_consumption = st.number_input("Fuel Consumption (L/100km)", min_value=0.0, max_value=30.0, value=9.0)
+            horsepower = st.number_input("Horsepower", min_value=50, max_value=1000, value=200)
+            weight = st.number_input("Weight (kg)", min_value=500, max_value=5000, value=1500)
+            year = st.number_input("Year", min_value=2015, max_value=2024, value=2023)
         
         if st.button("Run Benchmark"):
             self.benchmark_utils.start_benchmark()
@@ -218,14 +221,27 @@ class MainView:
                     engine_size = np.random.uniform(1.0, 8.0)
                     cylinders = np.random.randint(3, 12)
                     fuel_consumption = np.random.uniform(4.0, 20.0)
+                    horsepower = np.random.uniform(100, 800)
+                    weight = np.random.uniform(1000, 4000)
+                    year = np.random.randint(2015, 2024)
+                
+                features = {
+                    'Engine Size(L)': engine_size,
+                    'Cylinders': cylinders,
+                    'Fuel Consumption Comb (L/100 km)': fuel_consumption,
+                    'Horsepower': horsepower,
+                    'Weight (kg)': weight,
+                    'Year': year
+                }
                 
                 start_time = time.time()
                 try:
-                    prediction = self.controller.predict(engine_size, cylinders, fuel_consumption)
+                    prediction = self.controller.predict_emission(features)
                     duration = time.time() - start_time
                     self.benchmark_utils.record_prediction(duration, prediction)
                 except Exception as e:
-                    self.benchmark_utils.record_prediction(time.time() - start_time, None, 
+                    duration = time.time() - start_time
+                    self.benchmark_utils.record_prediction(duration, None, 
                                                          status='error', error=str(e))
                 
                 progress = (i + 1) / n_requests
