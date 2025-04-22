@@ -237,7 +237,8 @@ class MainView:
             
             st.success("Benchmark completed!")
             
-            # Display statistics
+            # Display overall statistics
+            st.subheader("Overall Statistics")
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Total Time", f"{stats['total_time']:.2f}s")
@@ -249,17 +250,33 @@ class MainView:
                 st.metric("Min Response Time", f"{stats['min_response_time']*1000:.1f}ms")
                 st.metric("Max Response Time", f"{stats['max_response_time']*1000:.1f}ms")
             
+            # Display time breakdown
+            st.subheader("Time Breakdown")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Network Time", 
+                         f"{stats['avg_network_time']*1000:.1f}ms",
+                         f"{stats['network_percentage']:.1f}%")
+            with col2:
+                st.metric("Processing Time", 
+                         f"{stats['avg_processing_time']*1000:.1f}ms",
+                         f"{stats['processing_percentage']:.1f}%")
+            with col3:
+                st.metric("Streamlit Overhead", 
+                         f"{stats['avg_streamlit_overhead']*1000:.1f}ms",
+                         f"{stats['streamlit_percentage']:.1f}%")
+            
             # Display plots
-            st.subheader("Response Time Trend")
+            st.subheader("Response Time Breakdown Trend")
             st.pyplot(self.benchmark_utils.plot_response_times())
             
-            st.subheader("Response Time Distribution")
+            st.subheader("Response Time Distributions")
             st.pyplot(self.benchmark_utils.plot_response_distribution())
             
             # Download results
             results_df = self.benchmark_utils.get_results_df()
             st.download_button(
-                "Download Results CSV",
+                "Download Detailed Results CSV",
                 results_df.to_csv().encode('utf-8'),
                 "benchmark_results.csv",
                 "text/csv",
