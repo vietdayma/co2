@@ -234,15 +234,38 @@ class MainView:
                     'Year': year
                 }
                 
-                start_time = time.time()
+                # Measure with network time
+                client_start = time.time()
                 try:
+                    # Start processing time
+                    process_start = time.time()
                     prediction = self.controller.predict_emission(features)
-                    duration = time.time() - start_time
-                    self.benchmark_utils.record_prediction(duration, prediction)
+                    process_end = time.time()
+                    
+                    # End total time
+                    client_end = time.time()
+                    
+                    # Calculate times
+                    total_time = (client_end - client_start) * 1000  # Convert to ms
+                    processing_time = (process_end - process_start) * 1000
+                    network_time = total_time - processing_time
+                    
+                    timing_data = {
+                        'total_time': total_time,
+                        'network_time': network_time,
+                        'processing_time': processing_time,
+                        'prediction': prediction,
+                        'status': 'success'
+                    }
+                    
                 except Exception as e:
-                    duration = time.time() - start_time
-                    self.benchmark_utils.record_prediction(duration, None, 
-                                                         status='error', error=str(e))
+                    timing_data = {
+                        'total_time': (time.time() - client_start) * 1000,
+                        'status': 'error',
+                        'error': str(e)
+                    }
+                
+                self.benchmark_utils.record_prediction(timing_data)
                 
                 progress = (i + 1) / n_requests
                 progress_bar.progress(progress)
@@ -253,26 +276,26 @@ class MainView:
             
             st.success("Benchmark completed!")
             
-            # Display statistics
+            # Display statistics with network metrics
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Total Time", f"{stats['total_time']:.2f}s")
                 st.metric("Success Rate", f"{stats['success_rate']:.1f}%")
             with col2:
-                st.metric("Requests/Second", f"{stats['requests_per_second']:.1f}")
-                st.metric("Avg Response Time", f"{stats['avg_response_time']*1000:.1f}ms")
+                st.metric("Avg Network Time", f"{stats['avg_network_time']:.1f}ms")
+                st.metric("Avg Processing Time", f"{stats['avg_processing_time']:.1f}ms")
             with col3:
-                st.metric("Min Response Time", f"{stats['min_response_time']*1000:.1f}ms")
-                st.metric("Max Response Time", f"{stats['max_response_time']*1000:.1f}ms")
+                st.metric("Min Response Time", f"{stats['min_response_time']:.1f}ms")
+                st.metric("Max Response Time", f"{stats['max_response_time']:.1f}ms")
             
-            # Display plots
-            st.subheader("Response Time Trend")
+            # Display plots with network breakdown
+            st.subheader("Response Time Breakdown")
             st.pyplot(self.benchmark_utils.plot_response_times())
             
-            st.subheader("Response Time Distribution")
+            st.subheader("Response Time Distributions")
             st.pyplot(self.benchmark_utils.plot_response_distribution())
             
-            # Download results
+            # Download results with network metrics
             results_df = self.benchmark_utils.get_results_df()
             st.download_button(
                 "Download Results CSV",

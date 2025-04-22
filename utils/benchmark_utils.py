@@ -15,35 +15,27 @@ class BenchmarkUtils:
         self.start_time = time.time()
         self.results = []
         
-    def record_prediction(self, duration, prediction, status='success', error=None):
-        """Record a single prediction result"""
-        # Validate prediction result
-        if prediction is None and error is None:
-            status = 'error'
-            error = 'No prediction result'
-        elif prediction is None and error is not None:
-            status = 'error'
-        elif prediction is not None:
-            status = 'success'
-            error = None
-            
-        # Ensure duration is positive
-        duration = max(duration, 0.000001)  # Minimum 1 microsecond
-        
-        self.results.append({
+    def record_prediction(self, timing_data):
+        """Record a prediction result with network metrics"""
+        # Ensure all required fields exist with defaults
+        timing_data = {
             'timestamp': datetime.now(),
-            'duration': duration,
-            'prediction': prediction,
-            'status': status,
-            'error': error
-        })
+            'total_duration': timing_data.get('total_time', 0),
+            'network_time': timing_data.get('network_time', 0),
+            'processing_time': timing_data.get('processing_time', 0),
+            'prediction': timing_data.get('prediction'),
+            'status': timing_data.get('status', 'error'),
+            'error': timing_data.get('error')
+        }
+        
+        self.results.append(timing_data)
         
     def end_benchmark(self):
         """End the benchmark session"""
         self.end_time = time.time()
         
     def get_statistics(self):
-        """Calculate benchmark statistics"""
+        """Calculate benchmark statistics including network metrics"""
         if not self.results:
             return {
                 'total_time': 0,
@@ -51,10 +43,11 @@ class BenchmarkUtils:
                 'successful_requests': 0,
                 'requests_per_second': 0,
                 'success_rate': 0,
-                'avg_response_time': 0,
+                'avg_total_time': 0,
+                'avg_network_time': 0,
+                'avg_processing_time': 0,
                 'min_response_time': 0,
-                'max_response_time': 0,
-                'std_response_time': 0
+                'max_response_time': 0
             }
             
         df = pd.DataFrame(self.results)
@@ -66,12 +59,13 @@ class BenchmarkUtils:
         
         # Calculate statistics only if there are successful requests
         if successful_requests > 0:
-            avg_response_time = successful_df['duration'].mean()
-            min_response_time = successful_df['duration'].min()
-            max_response_time = successful_df['duration'].max()
-            std_response_time = successful_df['duration'].std()
+            avg_total_time = successful_df['total_duration'].mean()
+            avg_network_time = successful_df['network_time'].mean()
+            avg_processing_time = successful_df['processing_time'].mean()
+            min_response_time = successful_df['total_duration'].min()
+            max_response_time = successful_df['total_duration'].max()
         else:
-            avg_response_time = min_response_time = max_response_time = std_response_time = 0
+            avg_total_time = avg_network_time = avg_processing_time = min_response_time = max_response_time = 0
         
         stats = {
             'total_time': total_time,
@@ -79,16 +73,17 @@ class BenchmarkUtils:
             'successful_requests': successful_requests,
             'requests_per_second': total_requests / total_time if total_time > 0 else 0,
             'success_rate': (successful_requests / total_requests * 100) if total_requests > 0 else 0,
-            'avg_response_time': avg_response_time,
+            'avg_total_time': avg_total_time,
+            'avg_network_time': avg_network_time,
+            'avg_processing_time': avg_processing_time,
             'min_response_time': min_response_time,
-            'max_response_time': max_response_time,
-            'std_response_time': std_response_time
+            'max_response_time': max_response_time
         }
         
         return stats
     
     def plot_response_times(self):
-        """Create response time trend plot"""
+        """Create response time trend plot with network breakdown"""
         df = pd.DataFrame(self.results)
         successful_df = df[df['status'] == 'success']
         
@@ -97,20 +92,33 @@ class BenchmarkUtils:
             ax.text(0.5, 0.5, 'No successful requests to plot', 
                    ha='center', va='center')
             ax.set_xlabel('Request Number')
-            ax.set_ylabel('Response Time (ms)')
-            ax.set_title('Response Time Trend')
+            ax.set_ylabel('Time (ms)')
+            ax.set_title('Response Time Breakdown')
             return fig
             
         fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(range(len(successful_df)), successful_df['duration'] * 1000)
+        
+        # Plot total time
+        ax.plot(range(len(successful_df)), successful_df['total_duration'], 
+                label='Total Time', color='blue')
+        
+        # Plot network time
+        ax.plot(range(len(successful_df)), successful_df['network_time'],
+                label='Network Time', color='red', alpha=0.7)
+        
+        # Plot processing time
+        ax.plot(range(len(successful_df)), successful_df['processing_time'],
+                label='Processing Time', color='green', alpha=0.7)
+        
         ax.set_xlabel('Request Number')
-        ax.set_ylabel('Response Time (ms)')
-        ax.set_title('Response Time Trend')
+        ax.set_ylabel('Time (ms)')
+        ax.set_title('Response Time Breakdown')
+        ax.legend()
         plt.grid(True, alpha=0.3)
         return fig
     
     def plot_response_distribution(self):
-        """Create response time distribution plot"""
+        """Create response time distribution plot with network breakdown"""
         df = pd.DataFrame(self.results)
         successful_df = df[df['status'] == 'success']
         
@@ -118,22 +126,42 @@ class BenchmarkUtils:
             fig, ax = plt.subplots(figsize=(10, 4))
             ax.text(0.5, 0.5, 'No successful requests to plot', 
                    ha='center', va='center')
-            ax.set_xlabel('Response Time (ms)')
+            ax.set_xlabel('Time (ms)')
             ax.set_ylabel('Frequency')
             ax.set_title('Response Time Distribution')
             return fig
             
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.hist(successful_df['duration'] * 1000, bins=50)
-        ax.set_xlabel('Response Time (ms)')
-        ax.set_ylabel('Frequency')
-        ax.set_title('Response Time Distribution')
-        plt.grid(True, alpha=0.3)
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 4))
+        
+        # Total time distribution
+        ax1.hist(successful_df['total_duration'], bins=30, color='blue', alpha=0.7)
+        ax1.set_xlabel('Total Time (ms)')
+        ax1.set_ylabel('Frequency')
+        ax1.set_title('Total Response Time')
+        
+        # Network time distribution
+        ax2.hist(successful_df['network_time'], bins=30, color='red', alpha=0.7)
+        ax2.set_xlabel('Network Time (ms)')
+        ax2.set_title('Network Time')
+        
+        # Processing time distribution
+        ax3.hist(successful_df['processing_time'], bins=30, color='green', alpha=0.7)
+        ax3.set_xlabel('Processing Time (ms)')
+        ax3.set_title('Processing Time')
+        
+        plt.tight_layout()
         return fig
     
     def get_results_df(self):
-        """Get results as DataFrame"""
+        """Get results as DataFrame with network metrics"""
         df = pd.DataFrame(self.results)
         if not df.empty:
-            df['duration_ms'] = df['duration'] * 1000  # Convert to milliseconds
+            # Ensure all columns exist
+            for col in ['total_duration', 'network_time', 'processing_time']:
+                if col not in df.columns:
+                    df[col] = 0
+            # Add percentage columns
+            total_time = df['total_duration']
+            df['network_percentage'] = (df['network_time'] / total_time * 100).round(2)
+            df['processing_percentage'] = (df['processing_time'] / total_time * 100).round(2)
         return df 
