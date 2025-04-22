@@ -1,67 +1,39 @@
-# CO2 Emission Prediction
+# CO2 Emission Predictor
 
-This application predicts CO2 emissions for vehicles based on their specifications using machine learning.
+An advanced web application for predicting and analyzing vehicle CO2 emissions using machine learning.
 
 ## Features
 
 - Predict CO2 emissions based on vehicle specifications
-- Analyze model performance and feature importance
-- Benchmark testing for model performance evaluation
+- Analyze feature importance in emission predictions
+- Get eco-friendly tips based on emission levels
+- Visual comparisons with average emissions
+- Emission rating system (A to F)
+- Interactive gauge charts and visualizations
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/YOUR_USERNAME/REPOSITORY_NAME.git
-cd REPOSITORY_NAME
+git clone https://github.com/yourusername/co2-emission-predictor.git
+cd co2-emission-predictor
 ```
 
-2. Install dependencies:
+2. Install the required packages:
 ```bash
 pip install -r requirements.txt
 ```
 
 ## Usage
 
-Run the application locally:
+1. Make sure you have the dataset file `co2 Emissions.csv` in the project root directory.
+
+2. Run the application:
 ```bash
 streamlit run app.py
 ```
 
-The application will be available at http://localhost:8501
-
-## Online Demo
-
-You can access the online demo at: https://share.streamlit.io/YOUR_USERNAME/REPOSITORY_NAME/main/app.py
-
-## Input Parameters
-
-- Engine Size (L)
-- Number of Cylinders
-- Fuel Consumption (L/100 km)
-- Horsepower
-- Vehicle Weight (kg)
-- Year of Manufacture
-
-## Features
-
-1. **Prediction**: Get instant CO2 emission predictions based on vehicle specifications
-2. **Analysis**: View model performance metrics and feature importance
-3. **Benchmark**: Run performance tests to evaluate model efficiency
-
-## Technologies Used
-
-- Python
-- Streamlit
-- Scikit-learn
-- Pandas
-- NumPy
-- Matplotlib
-- Seaborn
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+3. Open your web browser and navigate to the URL shown in the terminal (typically http://localhost:8501).
 
 ## Project Structure
 

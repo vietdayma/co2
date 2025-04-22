@@ -5,10 +5,15 @@ from utils.visualization import (
     create_gauge_chart,
     style_metric_cards
 )
+import pandas as pd
+import time
+import numpy as np
+from utils.benchmark_utils import BenchmarkUtils
 
 class MainView:
     def __init__(self, controller):
         self.controller = controller
+        self.benchmark_utils = BenchmarkUtils()
         st.set_page_config(
             page_title="CO2 Emission Predictor",
             page_icon="🌍",
@@ -24,12 +29,14 @@ class MainView:
         with st.sidebar:
             st.markdown("# 🚗 CO2 Emission Predictor")
             st.markdown("---")
-            page = st.radio("Navigation", ["Prediction", "Analysis"])
+            page = st.radio("Navigation", ["Prediction", "Analysis", "Benchmark"])
 
         if page == "Prediction":
             self._show_prediction_page()
-        else:
+        elif page == "Analysis":
             self._show_analysis_page()
+        else:
+            self._show_benchmark_page()
 
     def _show_prediction_page(self):
         """Display the prediction interface"""
@@ -184,3 +191,77 @@ class MainView:
             st.error(f"Error getting feature importance: {str(e)}")
 
         # Additional analysis sections can be added here 
+
+    def _show_benchmark_page(self):
+        st.title("Performance Benchmark 📊")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            n_requests = st.number_input("Number of Requests", min_value=1, max_value=10000, value=1000)
+        
+        with col2:
+            test_mode = st.selectbox("Test Mode", ["Fixed Parameters", "Random Parameters"])
+        
+        if test_mode == "Fixed Parameters":
+            engine_size = st.number_input("Engine Size (L)", min_value=0.0, max_value=10.0, value=2.0)
+            cylinders = st.number_input("Cylinders", min_value=0, max_value=16, value=4)
+            fuel_consumption = st.number_input("Fuel Consumption (L/100km)", min_value=0.0, max_value=30.0, value=9.0)
+        
+        if st.button("Run Benchmark"):
+            self.benchmark_utils.start_benchmark()
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for i in range(n_requests):
+                if test_mode == "Random Parameters":
+                    engine_size = np.random.uniform(1.0, 8.0)
+                    cylinders = np.random.randint(3, 12)
+                    fuel_consumption = np.random.uniform(4.0, 20.0)
+                
+                start_time = time.time()
+                try:
+                    prediction = self.controller.predict(engine_size, cylinders, fuel_consumption)
+                    duration = time.time() - start_time
+                    self.benchmark_utils.record_prediction(duration, prediction)
+                except Exception as e:
+                    self.benchmark_utils.record_prediction(time.time() - start_time, None, 
+                                                         status='error', error=str(e))
+                
+                progress = (i + 1) / n_requests
+                progress_bar.progress(progress)
+                status_text.text(f"Processing request {i+1}/{n_requests}")
+            
+            self.benchmark_utils.end_benchmark()
+            stats = self.benchmark_utils.get_statistics()
+            
+            st.success("Benchmark completed!")
+            
+            # Display statistics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Time", f"{stats['total_time']:.2f}s")
+                st.metric("Success Rate", f"{stats['success_rate']:.1f}%")
+            with col2:
+                st.metric("Requests/Second", f"{stats['requests_per_second']:.1f}")
+                st.metric("Avg Response Time", f"{stats['avg_response_time']*1000:.1f}ms")
+            with col3:
+                st.metric("Min Response Time", f"{stats['min_response_time']*1000:.1f}ms")
+                st.metric("Max Response Time", f"{stats['max_response_time']*1000:.1f}ms")
+            
+            # Display plots
+            st.subheader("Response Time Trend")
+            st.pyplot(self.benchmark_utils.plot_response_times())
+            
+            st.subheader("Response Time Distribution")
+            st.pyplot(self.benchmark_utils.plot_response_distribution())
+            
+            # Download results
+            results_df = self.benchmark_utils.get_results_df()
+            st.download_button(
+                "Download Results CSV",
+                results_df.to_csv().encode('utf-8'),
+                "benchmark_results.csv",
+                "text/csv",
+                key='download-csv'
+            ) 
