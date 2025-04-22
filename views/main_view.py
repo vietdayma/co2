@@ -193,105 +193,139 @@ class MainView:
         # Additional analysis sections can be added here 
 
     def _show_benchmark_page(self):
-        st.title("Benchmark")
+        st.title("Performance Benchmark 📊")
         
         col1, col2 = st.columns(2)
         with col1:
-            num_requests = st.number_input("Number of requests", min_value=1, value=1000)
+            n_requests = st.number_input("Number of Requests", min_value=1, max_value=10000, value=1000)
+        
         with col2:
-            batch_size = st.number_input("Batch size", min_value=1, value=100)
+            test_mode = st.selectbox("Test Mode", ["Fixed Parameters", "Random Parameters"])
+        
+        if test_mode == "Fixed Parameters":
+            engine_size = st.number_input("Engine Size (L)", min_value=0.0, max_value=10.0, value=2.0)
+            cylinders = st.number_input("Cylinders", min_value=0, max_value=16, value=4)
+            fuel_consumption = st.number_input("Fuel Consumption (L/100km)", min_value=0.0, max_value=30.0, value=9.0)
+            horsepower = st.number_input("Horsepower", min_value=50, max_value=1000, value=200)
+            weight = st.number_input("Weight (kg)", min_value=500, max_value=5000, value=1500)
+            year = st.number_input("Year", min_value=2015, max_value=2024, value=2023)
         
         if st.button("Run Benchmark"):
+            self.benchmark_utils.start_benchmark()
+            
             progress_bar = st.progress(0)
             status_text = st.empty()
+            
+            # Container for detailed timing logs
             timing_log = st.empty()
             
-            benchmark = BenchmarkUtils()
-            benchmark.start_benchmark()
-            
-            for i in range(num_requests):
+            for i in range(n_requests):
+                if test_mode == "Random Parameters":
+                    engine_size = np.random.uniform(1.0, 8.0)
+                    cylinders = np.random.randint(3, 12)
+                    fuel_consumption = np.random.uniform(4.0, 20.0)
+                    horsepower = np.random.uniform(100, 800)
+                    weight = np.random.uniform(1000, 4000)
+                    year = np.random.randint(2015, 2024)
+                
+                features = {
+                    'Engine Size(L)': engine_size,
+                    'Cylinders': cylinders,
+                    'Fuel Consumption Comb (L/100 km)': fuel_consumption,
+                    'Horsepower': horsepower,
+                    'Weight (kg)': weight,
+                    'Year': year
+                }
+                
+                # Start measuring total time (includes network overhead)
+                total_start = time.perf_counter()
+                
                 try:
-                    # Measure total request time
-                    request_start = time.perf_counter_ns()
+                    # Start measuring processing time
+                    process_start = time.perf_counter()
                     
-                    # Measure processing time
-                    process_start = time.perf_counter_ns()
-                    prediction = self.controller.predict_emission([100, 100, 100, 100])
-                    process_end = time.perf_counter_ns()
+                    # Actual prediction
+                    prediction = self.controller.predict_emission(features)
                     
-                    # Calculate timing in milliseconds
-                    total_time = (time.perf_counter_ns() - request_start) / 1_000_000
-                    processing_time = (process_end - process_start) / 1_000_000
+                    # End processing time
+                    process_end = time.perf_counter()
                     
-                    # Network time is the difference, with a minimum threshold
-                    network_time = max(0.1, total_time - processing_time)
+                    # End total time
+                    total_end = time.perf_counter()
+                    
+                    # Calculate times in milliseconds
+                    total_time = (total_end - total_start) * 1000
+                    processing_time = (process_end - process_start) * 1000
+                    
+                    # Network time includes both request and response overhead
+                    network_time = total_time - processing_time
                     
                     timing_data = {
                         'total_time': total_time,
                         'network_time': network_time,
                         'processing_time': processing_time,
-                        'prediction': prediction[0] if prediction is not None else None,
-                        'status': 'success' if prediction is not None else 'error'
+                        'prediction': prediction,
+                        'status': 'success'
                     }
+                    
+                    # Update timing log every 100 requests
+                    if i % 100 == 0:
+                        timing_log.text(f"""
+                        Request {i+1} timing:
+                        - Total: {total_time:.2f}ms
+                        - Network: {network_time:.2f}ms ({network_time/total_time*100:.1f}%)
+                        - Processing: {processing_time:.2f}ms ({processing_time/total_time*100:.1f}%)
+                        """)
+                    
                 except Exception as e:
-                    # If there's an error, estimate network time as 30% of total
-                    total_time = (time.perf_counter_ns() - request_start) / 1_000_000
+                    total_end = time.perf_counter()
                     timing_data = {
-                        'total_time': total_time,
-                        'network_time': total_time * 0.3,
-                        'processing_time': total_time * 0.7,
-                        'prediction': None,
+                        'total_time': (total_end - total_start) * 1000,
+                        'network_time': 0,
+                        'processing_time': 0,
                         'status': 'error',
                         'error': str(e)
                     }
                 
-                benchmark.record_prediction(timing_data)
+                self.benchmark_utils.record_prediction(timing_data)
                 
-                # Update progress
-                progress = (i + 1) / num_requests
+                progress = (i + 1) / n_requests
                 progress_bar.progress(progress)
-                status_text.text(f"Processing request {i+1}/{num_requests}")
-                
-                # Show detailed timing log every batch_size requests
-                if (i + 1) % batch_size == 0:
-                    stats = benchmark.get_statistics()
-                    timing_log.text(
-                        f"Batch {(i+1)//batch_size} metrics:\n"
-                        f"Total Time: {stats['avg_total_time']:.1f}ms\n"
-                        f"Network Time: {stats['avg_network_time']:.1f}ms ({stats['avg_network_time']/stats['avg_total_time']*100:.1f}%)\n"
-                        f"Processing Time: {stats['avg_processing_time']:.1f}ms ({stats['avg_processing_time']/stats['avg_total_time']*100:.1f}%)\n"
-                        f"Success Rate: {stats['success_rate']:.1f}%"
-                    )
+                status_text.text(f"Processing request {i+1}/{n_requests}")
             
-            benchmark.end_benchmark()
-            stats = benchmark.get_statistics()
+            self.benchmark_utils.end_benchmark()
+            stats = self.benchmark_utils.get_statistics()
             
             st.success("Benchmark completed!")
             
-            # Display statistics
-            st.header("Results")
+            # Display statistics with network metrics
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Total Time", f"{stats['total_time']:.2f}s")
                 st.metric("Success Rate", f"{stats['success_rate']:.1f}%")
-            with col2:
                 st.metric("Requests/Second", f"{stats['requests_per_second']:.1f}")
-                st.metric("Network %", f"{stats['avg_network_time']/stats['avg_total_time']*100:.1f}%")
+            with col2:
+                st.metric("Avg Network Time", f"{stats['avg_network_time']:.1f}ms")
+                st.metric("Network %", f"{(stats['avg_network_time']/(stats['avg_network_time'] + stats['avg_processing_time'])*100):.1f}%")
+                st.metric("Avg Processing Time", f"{stats['avg_processing_time']:.1f}ms")
             with col3:
-                st.metric("Total Requests", stats['total_requests'])
-                st.metric("Processing %", f"{stats['avg_processing_time']/stats['avg_total_time']*100:.1f}%")
+                st.metric("Min Response Time", f"{stats['min_response_time']:.1f}ms")
+                st.metric("Max Response Time", f"{stats['max_response_time']:.1f}ms")
+                st.metric("Processing %", f"{(stats['avg_processing_time']/(stats['avg_network_time'] + stats['avg_processing_time'])*100):.1f}%")
             
-            # Plot response times
-            st.subheader("Response Time Trend")
-            fig = benchmark.plot_response_times()
-            st.pyplot(fig)
+            # Display plots with network breakdown
+            st.subheader("Response Time Breakdown")
+            st.pyplot(self.benchmark_utils.plot_response_times())
             
-            # Plot response time distribution
-            st.subheader("Response Time Distribution")
-            fig = benchmark.plot_response_distribution()
-            st.pyplot(fig)
+            st.subheader("Response Time Distributions")
+            st.pyplot(self.benchmark_utils.plot_response_distribution())
             
-            # Show detailed results table
-            st.subheader("Detailed Results")
-            results_df = benchmark.get_results_df()
-            st.dataframe(results_df) 
+            # Download results with network metrics
+            results_df = self.benchmark_utils.get_results_df()
+            st.download_button(
+                "Download Results CSV",
+                results_df.to_csv().encode('utf-8'),
+                "benchmark_results.csv",
+                "text/csv",
+                key='download-csv'
+            ) 
